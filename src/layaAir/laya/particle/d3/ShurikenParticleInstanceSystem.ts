@@ -39,6 +39,13 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
      */
     private _floatCountPerParticleData: number;
 
+    /**@internal instance-buffer offset the ring buffer was last compacted to slot 0 from */
+    private _retireCompactBase: number = 0;
+    /**@internal particles retired since the last compaction */
+    private _pendingRetireCount: number = 0;
+    /**@internal minimum retired particles to accumulate before paying for a compaction upload */
+    private static _retireCompactThreshold: number = 32;
+
     /**
      * @ignore
      * @en creates an instance of ShurikenParticleInstanceSystem class.
@@ -48,6 +55,12 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
      */
     constructor(render: ShurikenParticleRenderer) {
         super(render, MeshTopology.Triangles, DrawType.DrawElementInstance);
+    }
+
+    protected _updateParticlesSimulationRestart(time: number): void {
+        super._updateParticlesSimulationRestart(time);
+        this._retireCompactBase = 0;
+        this._pendingRetireCount = 0;
     }
 
     /***
@@ -117,6 +130,8 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
      * @zh 初始化 buffer
      */
     _initBufferDatas(): void {
+        this._retireCompactBase = 0;
+        this._pendingRetireCount = 0;
         // todo  Resource._addMemory
         if (this._vertexBuffer) {
             // this._instanceBufferState.destroy();
@@ -231,22 +246,46 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
             }
         }
 
-        if (this._firstActiveElement != firstActive) {
-            let byteStride = this._floatCountPerParticleData * 4;
-            if (this._firstActiveElement < this._firstFreeElement) {
-                let activeStart = this._firstActiveElement * byteStride;
-                this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, activeStart, (this._firstFreeElement - this._firstActiveElement) * byteStride);
-            }
-            else {
-                let start = this._firstActiveElement * byteStride;
-                let a = this._bufferMaxParticles - this._firstActiveElement;
-                this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, start, a * byteStride);
+        if (this._firstActiveElement == firstActive) {
+            return;
+        }
 
-                if (this._firstFreeElement > 0) {
-                    this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, a * byteStride, 0, this._firstFreeElement * byteStride);
-                }
+        // Compacting the instance buffer to slot 0 is an O(alive-particle-count)
+        // GPU upload; retiring a single particle doesn't warrant paying that
+        // every frame. Batch retirements and only compact once enough have
+        // piled up (or the system has gone fully idle) -- trailing dead
+        // instances awaiting compaction still get drawn in the meantime, but
+        // the vertex shader already skips them via the currentTime/lifetime
+        // check, so this is visually harmless.
+        this._pendingRetireCount += this._firstActiveElement > firstActive
+            ? this._firstActiveElement - firstActive
+            : this._bufferMaxParticles - firstActive + this._firstActiveElement;
+
+        if (this._pendingRetireCount < ShurikenParticleInstanceSystem._retireCompactThreshold
+            && this._firstActiveElement != this._firstFreeElement) {
+            return;
+        }
+
+        this._compactInstanceVertexBuffer();
+    }
+
+    private _compactInstanceVertexBuffer(): void {
+        let byteStride = this._floatCountPerParticleData * 4;
+        if (this._firstActiveElement < this._firstFreeElement) {
+            let activeStart = this._firstActiveElement * byteStride;
+            this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, activeStart, (this._firstFreeElement - this._firstActiveElement) * byteStride);
+        }
+        else {
+            let start = this._firstActiveElement * byteStride;
+            let a = this._bufferMaxParticles - this._firstActiveElement;
+            this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, start, a * byteStride);
+
+            if (this._firstFreeElement > 0) {
+                this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, a * byteStride, 0, this._firstFreeElement * byteStride);
             }
         }
+        this._retireCompactBase = this._firstActiveElement;
+        this._pendingRetireCount = 0;
     }
 
     protected _freeRetiredParticles(): void {
@@ -525,22 +564,7 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
      * @zh 将新粒子添加到顶点缓冲区。
      */
     addNewParticlesToVertexBuffer(): void {
-        let byteStride = this._floatCountPerParticleData * 4;
-        // instance buffer 绘制不能偏移, 每次 从 0 更新整个 buffer
-        if (this._firstActiveElement < this._firstFreeElement) {
-            let start = this._firstActiveElement * byteStride;
-            this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, start, (this._firstFreeElement - this._firstActiveElement) * byteStride);
-        }
-        else {
-            let start = this._firstActiveElement * byteStride;
-            let a = this._bufferMaxParticles - this._firstActiveElement;
-            this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, 0, start, a * byteStride);
-
-            if (this._firstFreeElement > 0) {
-                this._instanceParticleVertexBuffer.setData(this._instanceVertex.buffer, a * byteStride, 0, this._firstFreeElement * byteStride);
-            }
-        }
-
+        this._compactInstanceVertexBuffer();
         this._firstNewElement = this._firstFreeElement;
     }
 
@@ -551,11 +575,14 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
      * @param stage 当前渲染上下文。
      */
     _updateRenderParams(stage: RenderContext3D) {
-        //this._instanceBufferState.bind();
-        // instance buffer 每次从 0 更新
+        // Use the last GPU-compacted base rather than the live
+        // _firstActiveElement: retirement compaction is now batched (see
+        // _retireActiveParticles), so the two can differ while a batch of
+        // dead instances is still awaiting compaction.
+        let base = this._retireCompactBase;
         this.clearRenderParams();
-        if (this._firstActiveElement < this._firstFreeElement) {
-            let indexCount = this._firstFreeElement - this._firstActiveElement;
+        if (base < this._firstFreeElement) {
+            let indexCount = this._firstFreeElement - base;
             this.setDrawElemenParams(this._meshIndexCount, 0);
             this.instanceCount = indexCount;
             //  LayaGL.renderDrawConatext.drawElementsInstanced(MeshTopology.Triangles, this._meshIndexCount, IndexFormat.UInt16, 0, indexCount);
@@ -563,7 +590,7 @@ export class ShurikenParticleInstanceSystem extends ShurikenParticleSystem {
             //  Stat.renderBatches++;
         }
         else {
-            let indexCount = this._bufferMaxParticles - this._firstActiveElement;
+            let indexCount = this._bufferMaxParticles - base;
             if (this._firstFreeElement > 0) {
                 indexCount += this._firstFreeElement;
             }
