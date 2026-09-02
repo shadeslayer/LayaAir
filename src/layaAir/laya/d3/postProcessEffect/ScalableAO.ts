@@ -294,6 +294,7 @@ export class ScalableAO extends PostProcessEffect {
         //context.source = finalTex;
         let blurTex: RenderTexture = RenderTexture.createFromPool(width, height, textureFormat, depthFormat, false, 1);
         //blur horizontal
+        cmd.setShaderDataVector2(shaderData, ScalableAO.BlurDelty, ScalableAO.deltyHorizontal);
         cmd.blitScreenTriangle(finalTex, blurTex, null, this._aoBlurHorizontalShader, shaderData, 0);
         //blur Vec
         cmd.setShaderDataVector2(shaderData, ScalableAO.BlurDelty, ScalableAO.deltyVector);
