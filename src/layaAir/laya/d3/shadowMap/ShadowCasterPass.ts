@@ -111,7 +111,13 @@ export class ShadowCasterPass {
             shadowMapWidth = shadowTileResolution * 2;
             shadowMapHeight = cascadesMode == ShadowCascadesMode.TwoCascades ? shadowTileResolution : shadowTileResolution * 2;
         }
-        this._shadowDirectLightMap && RenderTexture.recoverToPool(this._shadowDirectLightMap);
+        // Resolution/cascade mode rarely changes at runtime; skip the pool
+        // round-trip when the held map already matches the requested size.
+        var current = this._shadowDirectLightMap;
+        if (current && current.width === shadowMapWidth && current.height === shadowMapHeight) {
+            return current;
+        }
+        current && RenderTexture.recoverToPool(current);
         this._shadowDirectLightMap = ShadowUtils.getTemporaryShadowTexture(shadowMapWidth, shadowMapHeight, ShadowMapFormat.bit16);
         return this._shadowDirectLightMap;
     }
@@ -125,10 +131,14 @@ export class ShadowCasterPass {
      * @returns 聚光灯的阴影贴图纹理。
      */
     getSpotLightShadowPassData(light: ISpotLightData) {
-        this._shadowSpotLightMap && RenderTexture.recoverToPool(this._shadowSpotLightMap);
         var shadowResolution: number = light.shadowResolution;
         var shadowMapWidth = shadowResolution;
         var shadowMapHeight = shadowResolution;
+        var current = this._shadowSpotLightMap;
+        if (current && current.width === shadowMapWidth && current.height === shadowMapHeight) {
+            return current;
+        }
+        current && RenderTexture.recoverToPool(current);
         this._shadowSpotLightMap = ShadowUtils.getTemporaryShadowTexture(shadowMapWidth, shadowMapHeight, ShadowMapFormat.bit16);
         return this._shadowSpotLightMap;
     }
