@@ -38,6 +38,10 @@ export class LensFlareElementGeomtry extends GeometryElement {
     static instanceVertexDeclaration: VertexDeclaration;
     /**@internal 最大instanceData*/
     static lensFlareElementMax: number = 20;
+    /**@internal shared static quad/index buffers -- identical data for every instance, built once */
+    private static _sharedVertexBuffer: VertexBuffer3D;
+    /**@internal */
+    private static _sharedIndexBuffer: IndexBuffer3D;
     /**@internal */
     private _vertexBuffer: VertexBuffer3D;
     /**@internal */
@@ -75,17 +79,23 @@ export class LensFlareElementGeomtry extends GeometryElement {
     }
 
     private _createBuffer() {
-        //VB
-        this._vertexBuffer = Laya3DRender.renderOBJCreate.createVertexBuffer3D(LensFlareElementGeomtry.lensQuadVertices.length * 4, BufferUsage.Dynamic, false);
-        this._vertexBuffer.vertexDeclaration = LensFlareElementGeomtry.vertexDeclaration;
-        this._vertexBuffer.setData(LensFlareElementGeomtry.lensQuadVertices.buffer);
-        //instanceVB
+        //VB + IB: identical quad/index data for every LensFlareCMD -- build once, share
+        if (!LensFlareElementGeomtry._sharedVertexBuffer) {
+            const vb = Laya3DRender.renderOBJCreate.createVertexBuffer3D(LensFlareElementGeomtry.lensQuadVertices.length * 4, BufferUsage.Dynamic, false);
+            vb.vertexDeclaration = LensFlareElementGeomtry.vertexDeclaration;
+            vb.setData(LensFlareElementGeomtry.lensQuadVertices.buffer);
+            LensFlareElementGeomtry._sharedVertexBuffer = vb;
+
+            const ib = Laya3DRender.renderOBJCreate.createIndexBuffer3D(IndexFormat.UInt16, LensFlareElementGeomtry.lensQuadIndex.length, BufferUsage.Static, false);
+            ib.setData(LensFlareElementGeomtry.lensQuadIndex);
+            LensFlareElementGeomtry._sharedIndexBuffer = ib;
+        }
+        this._vertexBuffer = LensFlareElementGeomtry._sharedVertexBuffer;
+        this._indexBuffer = LensFlareElementGeomtry._sharedIndexBuffer;
+        //instanceVB: per-instance, not shared
         this._instanceVertexBuffer = Laya3DRender.renderOBJCreate.createVertexBuffer3D(LensFlareElementGeomtry.lensFlareElementMax * 4 * 4, BufferUsage.Dynamic, false);
         this._instanceVertexBuffer.instanceBuffer = true;
         this._instanceVertexBuffer.vertexDeclaration = LensFlareElementGeomtry.instanceVertexDeclaration;
-        //IB
-        this._indexBuffer = Laya3DRender.renderOBJCreate.createIndexBuffer3D(IndexFormat.UInt16, LensFlareElementGeomtry.lensQuadIndex.length, BufferUsage.Static, false);
-        this._indexBuffer.setData(LensFlareElementGeomtry.lensQuadIndex);
         //VAO
         this.bufferState = new BufferState();
         this.bufferState.applyState([this._vertexBuffer, this._instanceVertexBuffer], this._indexBuffer);
@@ -119,11 +129,12 @@ export class LensFlareElementGeomtry extends GeometryElement {
      * @zh 销毁镜头光晕元素几何体并释放其资源。
      */
     destroy(): void {
+        // _vertexBuffer/_indexBuffer are the shared static buffers, owned by
+        // the class -- only the per-instance buffer and this geometry's own
+        // bufferState are destroyed here.
         super.destroy();
-        this._vertexBuffer.destroy();
         this._instanceVertexBuffer.destroy();
         this.bufferState.destroy();
-        this._indexBuffer.destroy();
     }
 
     /**
