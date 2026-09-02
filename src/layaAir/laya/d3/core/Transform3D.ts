@@ -589,7 +589,7 @@ export class Transform3D extends EventDispatcher {
                 //这里将剔除单位矩阵的计算
                 let effectiveTrans = this._parent;
 
-                while (effectiveTrans._parent && effectiveTrans.isDefaultMatrix) {
+                while (effectiveTrans._parent && effectiveTrans.isDefaultMatrix && !effectiveTrans.worldNeedUpdate) {
                     effectiveTrans = effectiveTrans._parent;
                 }
                 Matrix4x4.multiply(effectiveTrans.worldMatrix, this.localMatrix, this._worldMatrix);
@@ -696,10 +696,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     protected _onWorldPositionRotationTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER, true);
+        this._notifyTransformChanged();
         for (var i: number = 0, n: number = this._children!.length; i < n; i++)
             this._children![i]._onWorldPositionRotationTransform();
     }
@@ -708,10 +708,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     protected _onWorldPositionScaleTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDSCALE, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDSCALE, true);
+        this._notifyTransformChanged();
         for (var i: number = 0, n: number = this._children!.length; i < n; i++)
             this._children![i]._onWorldPositionScaleTransform();
     }
@@ -720,10 +720,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     protected _onWorldPositionTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION, true);
+        this._notifyTransformChanged();
         if (Transform3D._inAnimatorBatch) {
             if (this._lastAnimatorFrame === Transform3D._currentAnimatorFrame) return;
             this._lastAnimatorFrame = Transform3D._currentAnimatorFrame;
@@ -739,10 +739,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     protected _onWorldRotationTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER, true);
+        this._notifyTransformChanged();
         if (Transform3D._inAnimatorBatch) {
             if (this._lastAnimatorFrame === Transform3D._currentAnimatorFrame) return;
             this._lastAnimatorFrame = Transform3D._currentAnimatorFrame;
@@ -758,10 +758,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     protected _onWorldScaleTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDSCALE, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDSCALE, true);
+        this._notifyTransformChanged();
         if (Transform3D._inAnimatorBatch) {
             if (this._lastAnimatorFrame === Transform3D._currentAnimatorFrame) return;
             this._lastAnimatorFrame = Transform3D._currentAnimatorFrame;
@@ -777,10 +777,10 @@ export class Transform3D extends EventDispatcher {
      * @internal
      */
     _onWorldTransform(): void {
-        if (!this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER) || !this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE)) {
-            this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER | Transform3D.TRANSFORM_WORLDSCALE, true);
-            this._notifyTransformChanged();
-        }
+        if (this._getTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDPOSITION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDQUATERNION) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDEULER) && this._getTransformFlag(Transform3D.TRANSFORM_WORLDSCALE))
+            return; // subtree already dirty for this aspect, nothing new to propagate
+        this._setTransformFlag(Transform3D.TRANSFORM_WORLDMATRIX | Transform3D.TRANSFORM_WORLDPOSITION | Transform3D.TRANSFORM_WORLDQUATERNION | Transform3D.TRANSFORM_WORLDEULER | Transform3D.TRANSFORM_WORLDSCALE, true);
+        this._notifyTransformChanged();
         if (Transform3D._inAnimatorBatch) {
             if (this._lastAnimatorFrame === Transform3D._currentAnimatorFrame) return;
             this._lastAnimatorFrame = Transform3D._currentAnimatorFrame;
