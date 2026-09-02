@@ -80,7 +80,10 @@ export class RenderListQueue {
      * 清空队列
      */
     clear() {
-        this._elements.elements.fill(null); //避免引用js对象导致无法gc
+        // Only null out the range actually populated last frame, not the
+        // backing array's historical peak length (elements[] only grows,
+        // never shrinks).
+        this._elements.elements.fill(null, 0, this._elements.length); //避免引用js对象导致无法gc
         this._elements.length = 0;
         this.batchModule.length = 0;
     }
