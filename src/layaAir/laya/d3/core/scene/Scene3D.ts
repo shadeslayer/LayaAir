@@ -68,6 +68,12 @@ export enum FogMode {
 export class Scene3D extends Sprite {
     private static _lightTexture: Texture2D;
     private static _lightPixles: Float32Array;
+    // Cache of the scene/light state the shared light buffer was last built for
+    // (the buffer/texture above are static, so this must track whichever scene
+    // last wrote them, not just "this" scene).
+    private static _lightBufferScene: Scene3D = null;
+    private static _lightBufferMark: number = -1;
+    private static _lightBufferEnableLight: boolean = undefined;
     /** @internal */
     static _shadowCasterPass: ShadowCasterPass;
     /**@internal */
@@ -921,35 +927,42 @@ export class Scene3D extends Sprite {
             var curCount: number = 0;
             var dirCount: number = Stat.enableLight ? this._directionLights._length : 0;
             var dirElements: DirectionLightCom[] = this._directionLights._elements;
+            // Scene3D._lightTexture/_lightPixles are shared statics, so "unchanged"
+            // must also mean "still built for this scene", not just "mark matches".
+            var bufferUnchanged: boolean = Scene3D._lightBufferScene === this
+                && Scene3D._lightBufferMark === LightQueue._changeMark
+                && Scene3D._lightBufferEnableLight === Stat.enableLight;
             if (dirCount > 0) {
-                var sunLightIndex: number = this._directionLights.getBrightestLight();//get the brightest light as sun
-                this._mainDirectionLight = dirElements[sunLightIndex];
-                this._directionLights.normalLightOrdering(sunLightIndex);
-                for (var i: number = 0; i < dirCount; i++, curCount++) {
-                    var dirLight: DirectionLightCom = dirElements[i];
-                    var dir: Vector3 = dirLight.direction;
-                    var intCor: Vector3 = dirLight._intensityColor;
-                    var off: number = floatWidth * curCount;
-                    intCor.x = Color.gammaToLinearSpace(dirLight.color.r);
-                    intCor.y = Color.gammaToLinearSpace(dirLight.color.g);
-                    intCor.z = Color.gammaToLinearSpace(dirLight.color.b);
-                    Vector3.scale(intCor, dirLight._intensity, intCor);
-                    dirLight.owner.transform.worldMatrix.getForward(dir);
-                    Vector3.normalize(dir, dir);//矩阵有缩放时需要归一化
-                    ligPix[off] = intCor.x;
-                    ligPix[off + 1] = intCor.y;
-                    ligPix[off + 2] = intCor.z;
-                    ligPix[off + 3] = dirLight._lightmapBakedType;//0: MIX  1:REALTIME
-                    ligPix[off + 4] = dir.x;
-                    ligPix[off + 5] = dir.y;
-                    ligPix[off + 6] = dir.z;
-                    // if (i == 0) {
-                    // 	this._setShaderValue(Scene3D.SUNLIGHTDIRCOLOR, intCor);
-                    // 	this._setShaderValue(Scene3D.SUNLIGHTDIRECTION, dir);
-                    // }
-                    if (i === 0) {
-                        this._sunColor = dirLight.color;
-                        this._sundir = dir;
+                if (!bufferUnchanged) {
+                    var sunLightIndex: number = this._directionLights.getBrightestLight();//get the brightest light as sun
+                    this._mainDirectionLight = dirElements[sunLightIndex];
+                    this._directionLights.normalLightOrdering(sunLightIndex);
+                    for (var i: number = 0; i < dirCount; i++, curCount++) {
+                        var dirLight: DirectionLightCom = dirElements[i];
+                        var dir: Vector3 = dirLight.direction;
+                        var intCor: Vector3 = dirLight._intensityColor;
+                        var off: number = floatWidth * curCount;
+                        intCor.x = Color.gammaToLinearSpace(dirLight.color.r);
+                        intCor.y = Color.gammaToLinearSpace(dirLight.color.g);
+                        intCor.z = Color.gammaToLinearSpace(dirLight.color.b);
+                        Vector3.scale(intCor, dirLight._intensity, intCor);
+                        dirLight.owner.transform.worldMatrix.getForward(dir);
+                        Vector3.normalize(dir, dir);//矩阵有缩放时需要归一化
+                        ligPix[off] = intCor.x;
+                        ligPix[off + 1] = intCor.y;
+                        ligPix[off + 2] = intCor.z;
+                        ligPix[off + 3] = dirLight._lightmapBakedType;//0: MIX  1:REALTIME
+                        ligPix[off + 4] = dir.x;
+                        ligPix[off + 5] = dir.y;
+                        ligPix[off + 6] = dir.z;
+                        // if (i == 0) {
+                        // 	this._setShaderValue(Scene3D.SUNLIGHTDIRCOLOR, intCor);
+                        // 	this._setShaderValue(Scene3D.SUNLIGHTDIRECTION, dir);
+                        // }
+                        if (i === 0) {
+                            this._sunColor = dirLight.color;
+                            this._sundir = dir;
+                        }
                     }
                 }
                 shaderValues.addDefine(Scene3DShaderDeclaration.SHADERDEFINE_DIRECTIONLIGHT);
@@ -961,27 +974,29 @@ export class Scene3D extends Sprite {
 
             var poiCount: number = Stat.enableLight ? this._pointLights._length : 0;
             if (poiCount > 0) {
-                var poiElements: PointLightCom[] = this._pointLights._elements;
-                var mainPointLightIndex: number = this._pointLights.getBrightestLight();
-                this._mainPointLight = poiElements[mainPointLightIndex];
-                this._pointLights.normalLightOrdering(mainPointLightIndex);
-                for (var i: number = 0; i < poiCount; i++, curCount++) {
-                    var poiLight: PointLightCom = poiElements[i];
-                    var pos: Vector3 = poiLight.owner.transform.position;
-                    var intCor: Vector3 = poiLight._intensityColor;
-                    var off: number = floatWidth * curCount;
-                    intCor.x = Color.gammaToLinearSpace(poiLight.color.r);
-                    intCor.y = Color.gammaToLinearSpace(poiLight.color.g);
-                    intCor.z = Color.gammaToLinearSpace(poiLight.color.b);
-                    Vector3.scale(intCor, poiLight._intensity, intCor);
-                    ligPix[off] = intCor.x;
-                    ligPix[off + 1] = intCor.y;
-                    ligPix[off + 2] = intCor.z;
-                    ligPix[off + 3] = poiLight.range;
-                    ligPix[off + 4] = pos.x;
-                    ligPix[off + 5] = pos.y;
-                    ligPix[off + 6] = pos.z;
-                    ligPix[off + 7] = poiLight._lightmapBakedType;//0: MIX  1:REALTIME
+                if (!bufferUnchanged) {
+                    var poiElements: PointLightCom[] = this._pointLights._elements;
+                    var mainPointLightIndex: number = this._pointLights.getBrightestLight();
+                    this._mainPointLight = poiElements[mainPointLightIndex];
+                    this._pointLights.normalLightOrdering(mainPointLightIndex);
+                    for (var i: number = 0; i < poiCount; i++, curCount++) {
+                        var poiLight: PointLightCom = poiElements[i];
+                        var pos: Vector3 = poiLight.owner.transform.position;
+                        var intCor: Vector3 = poiLight._intensityColor;
+                        var off: number = floatWidth * curCount;
+                        intCor.x = Color.gammaToLinearSpace(poiLight.color.r);
+                        intCor.y = Color.gammaToLinearSpace(poiLight.color.g);
+                        intCor.z = Color.gammaToLinearSpace(poiLight.color.b);
+                        Vector3.scale(intCor, poiLight._intensity, intCor);
+                        ligPix[off] = intCor.x;
+                        ligPix[off + 1] = intCor.y;
+                        ligPix[off + 2] = intCor.z;
+                        ligPix[off + 3] = poiLight.range;
+                        ligPix[off + 4] = pos.x;
+                        ligPix[off + 5] = pos.y;
+                        ligPix[off + 6] = pos.z;
+                        ligPix[off + 7] = poiLight._lightmapBakedType;//0: MIX  1:REALTIME
+                    }
                 }
                 shaderValues.addDefine(Scene3DShaderDeclaration.SHADERDEFINE_POINTLIGHT);
             }
@@ -992,34 +1007,36 @@ export class Scene3D extends Sprite {
 
             var spoCount: number = Stat.enableLight ? this._spotLights._length : 0;
             if (spoCount > 0) {
-                var spoElements: SpotLightCom[] = this._spotLights._elements;
-                var mainSpotLightIndex: number = this._spotLights.getBrightestLight();
-                this._mainSpotLight = spoElements[mainSpotLightIndex];
-                this._spotLights.normalLightOrdering(mainSpotLightIndex)
-                for (var i: number = 0; i < spoCount; i++, curCount++) {
-                    var spoLight: SpotLightCom = spoElements[i];
-                    var dir: Vector3 = spoLight.direction;
-                    var pos: Vector3 = spoLight.owner.transform.position;
-                    var intCor: Vector3 = spoLight._intensityColor;
-                    var off: number = floatWidth * curCount;
-                    intCor.x = Color.gammaToLinearSpace(spoLight.color.r);
-                    intCor.y = Color.gammaToLinearSpace(spoLight.color.g);
-                    intCor.z = Color.gammaToLinearSpace(spoLight.color.b);
-                    Vector3.scale(intCor, spoLight._intensity, intCor);
-                    spoLight.owner.transform.worldMatrix.getForward(dir);
-                    Vector3.normalize(dir, dir);
-                    ligPix[off] = intCor.x;
-                    ligPix[off + 1] = intCor.y;
-                    ligPix[off + 2] = intCor.z;
-                    ligPix[off + 3] = spoLight.range;
-                    ligPix[off + 4] = pos.x;
-                    ligPix[off + 5] = pos.y;
-                    ligPix[off + 6] = pos.z;
-                    ligPix[off + 7] = spoLight.spotAngle * Math.PI / 180;
-                    ligPix[off + 8] = dir.x;
-                    ligPix[off + 9] = dir.y;
-                    ligPix[off + 10] = dir.z;
-                    ligPix[off + 11] = spoLight._lightmapBakedType;//0: MIX  1:REALTIME
+                if (!bufferUnchanged) {
+                    var spoElements: SpotLightCom[] = this._spotLights._elements;
+                    var mainSpotLightIndex: number = this._spotLights.getBrightestLight();
+                    this._mainSpotLight = spoElements[mainSpotLightIndex];
+                    this._spotLights.normalLightOrdering(mainSpotLightIndex)
+                    for (var i: number = 0; i < spoCount; i++, curCount++) {
+                        var spoLight: SpotLightCom = spoElements[i];
+                        var dir: Vector3 = spoLight.direction;
+                        var pos: Vector3 = spoLight.owner.transform.position;
+                        var intCor: Vector3 = spoLight._intensityColor;
+                        var off: number = floatWidth * curCount;
+                        intCor.x = Color.gammaToLinearSpace(spoLight.color.r);
+                        intCor.y = Color.gammaToLinearSpace(spoLight.color.g);
+                        intCor.z = Color.gammaToLinearSpace(spoLight.color.b);
+                        Vector3.scale(intCor, spoLight._intensity, intCor);
+                        spoLight.owner.transform.worldMatrix.getForward(dir);
+                        Vector3.normalize(dir, dir);
+                        ligPix[off] = intCor.x;
+                        ligPix[off + 1] = intCor.y;
+                        ligPix[off + 2] = intCor.z;
+                        ligPix[off + 3] = spoLight.range;
+                        ligPix[off + 4] = pos.x;
+                        ligPix[off + 5] = pos.y;
+                        ligPix[off + 6] = pos.z;
+                        ligPix[off + 7] = spoLight.spotAngle * Math.PI / 180;
+                        ligPix[off + 8] = dir.x;
+                        ligPix[off + 9] = dir.y;
+                        ligPix[off + 10] = dir.z;
+                        ligPix[off + 11] = spoLight._lightmapBakedType;//0: MIX  1:REALTIME
+                    }
                 }
                 shaderValues.addDefine(Scene3DShaderDeclaration.SHADERDEFINE_SPOTLIGHT);
             }
@@ -1028,7 +1045,12 @@ export class Scene3D extends Sprite {
                 this._mainSpotLight = null;
             }
 
-            (curCount > 0) && (ligTex.setSubPixelsData(0, 0, pixelWidth, curCount, ligPix, 0, false, false, false));
+            if (!bufferUnchanged) {
+                (curCount > 0) && (ligTex.setSubPixelsData(0, 0, pixelWidth, curCount, ligPix, 0, false, false, false));
+                Scene3D._lightBufferScene = this;
+                Scene3D._lightBufferMark = LightQueue._changeMark;
+                Scene3D._lightBufferEnableLight = Stat.enableLight;
+            }
             shaderValues.setTexture(Scene3D.LIGHTBUFFER, ligTex);
             shaderValues.setInt(Scene3D.DIRECTIONLIGHTCOUNT, this._directionLights._length);
             shaderValues.setTexture(Scene3D.CLUSTERBUFFER, Cluster.instance._clusterTexture);

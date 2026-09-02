@@ -2,6 +2,7 @@ import { IPointLightData } from "../../../RenderDriver/RenderModuleData/Design/3
 import { Component } from "../../../components/Component";
 import { Laya3DRender } from "../../RenderObjs/Laya3DRender";
 import { Light, LightType } from "./Light";
+import { LightQueue } from "./LightQueue";
 
 
 /**
@@ -28,6 +29,7 @@ export class PointLightCom extends Light {
     set range(value: number) {
         this._range = value;
         this._dataModule.range = value;
+        LightQueue._changeMark++;
     }
 
     /**

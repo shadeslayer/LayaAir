@@ -6,6 +6,8 @@ import { Component } from "../../../components/Component";
 import { Color } from "../../../maths/Color";
 import { Matrix4x4 } from "../../../maths/Matrix4x4";
 import { Vector3 } from "../../../maths/Vector3";
+import { Event } from "../../../events/Event";
+import { LightQueue } from "./LightQueue";
 import { IDirectLightData, IPointLightData, ISpotLightData } from "../../../RenderDriver/RenderModuleData/Design/3D/I3DRenderModuleData";
 
 /** 
@@ -54,11 +56,20 @@ export class Light extends Component {
      */
     _lightWoldMatrix: Matrix4x4 = new Matrix4x4();
 
-    /** 
+    /**
      * @en The light color.
-     * @zh 灯光颜色。 
+     * @zh 灯光颜色。
      */
-    color: Color;
+    private _color: Color;
+
+    get color(): Color {
+        return this._color;
+    }
+
+    set color(value: Color) {
+        this._color = value;
+        LightQueue._changeMark++;
+    }
 
     declare readonly owner: Sprite3D;
 
@@ -72,6 +83,7 @@ export class Light extends Component {
 
     set intensity(value: number) {
         this._intensity = value;
+        LightQueue._changeMark++;
     }
 
     /**
@@ -255,6 +267,7 @@ export class Light extends Component {
             scene._lightCount++;
             this._addToLightQueue();
             this._isAlternate = false;
+            this.owner.transform.on(Event.TRANSFORM_CHANGED, this, this._onLightTransformChanged);
         }
         else {
             scene._alternateLights.add(this);
@@ -273,10 +286,12 @@ export class Light extends Component {
         else {
             scene._lightCount--;
             this._removeFromLightQueue();
+            this.owner.transform.off(Event.TRANSFORM_CHANGED, this, this._onLightTransformChanged);
             if (scene._alternateLights._length > 0) {
                 var alternateLight = scene._alternateLights.shift();
                 alternateLight!._addToLightQueue();
                 alternateLight!._isAlternate = false;
+                alternateLight!.owner.transform.on(Event.TRANSFORM_CHANGED, alternateLight, alternateLight!._onLightTransformChanged);
                 scene._lightCount++;
             }
         }
@@ -287,6 +302,16 @@ export class Light extends Component {
 
     protected _removeFromLightQueue(): void {
     }
+
+    /**
+     * @internal
+     * Any light-affecting transform move (position/rotation feeding direction,
+     * range/cone origin, etc.) invalidates the cached cluster/light-buffer data.
+     */
+    protected _onLightTransformChanged(): void {
+        LightQueue._changeMark++;
+    }
+
     protected _onEnable(): void {
         (this.lightmapBakedType !== LightMode.bakeOnly) && (this._addToScene());
     }

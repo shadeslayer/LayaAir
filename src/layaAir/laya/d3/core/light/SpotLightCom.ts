@@ -1,5 +1,6 @@
 import { Scene3D } from "../scene/Scene3D";
 import { Light, LightType } from "./Light";
+import { LightQueue } from "./LightQueue";
 import { Component } from "../../../components/Component";
 import { Vector3 } from "../../../maths/Vector3";
 import { Laya3DRender } from "../../RenderObjs/Laya3DRender";
@@ -44,6 +45,7 @@ export class SpotLightCom extends Light {
 
     set spotAngle(value: number) {
         this._dataModule.spotAngle = Math.max(Math.min(value, 179), 0);
+        LightQueue._changeMark++;
     }
 
     /**
@@ -56,6 +58,7 @@ export class SpotLightCom extends Light {
 
     set range(value: number) {
         this._dataModule.spotRange = value;
+        LightQueue._changeMark++;
     }
 
     /**

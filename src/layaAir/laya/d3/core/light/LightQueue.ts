@@ -6,6 +6,12 @@ import { Light } from "./Light";
  * @zh `LightQueue` 类管理一个灯光队列
  */
 export class LightQueue<T extends Light> {
+    // Bumped whenever a light joins/leaves an active queue, is reordered, has
+    // a render-affecting property change, or its transform moves. Cluster.update
+    // and Scene3D._prepareSceneToRender use this to skip rebinning/reuploading
+    // light data when nothing has actually changed since the last frame.
+    static _changeMark: number = 0;
+
     _length: number = 0;
     _elements: T[] = [];
 
@@ -24,6 +30,7 @@ export class LightQueue<T extends Light> {
         else
             this._elements[this._length] = light;
         this._length++;
+        LightQueue._changeMark++;
     }
 
     /**
@@ -39,6 +46,7 @@ export class LightQueue<T extends Light> {
             var end: T = this._elements[this._length];
             this._elements[index] = end;
         }
+        LightQueue._changeMark++;
     }
 
     /**
@@ -72,9 +80,11 @@ export class LightQueue<T extends Light> {
      * @zh 重新排列队列中的灯光，确保最亮的灯光在最前面。
      */
     normalLightOrdering(brightestIndex: number) {
+        if (brightestIndex === 0) return;
         var firstLight: T = this._elements[0];
         this._elements[0] = this._elements[brightestIndex];
         this._elements[brightestIndex] = firstLight;
+        LightQueue._changeMark++;
     }
 }
 
