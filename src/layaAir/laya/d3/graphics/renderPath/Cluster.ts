@@ -46,6 +46,15 @@ export class Cluster {
     private _updateMark: number = 0;
     private _depthSliceParam: Vector2 = new Vector2();
 
+    // Cache of the last camera/light state this cluster was binned for, so an
+    // unchanged camera + unchanged light set can skip the full rebuild in update().
+    private _lastCamera: Camera = null;
+    private _lastScene: Scene3D = null;
+    private _lastLightsMark: number = -1;
+    // 16 view-matrix elements + nearPlane, farPlane, orthographic, fieldOfView,
+    // aspectRatio, orthographicVerticalSize — all of Cluster.update()'s binning inputs.
+    private _lastCameraSnapshot: Float32Array = new Float32Array(22);
+
     public _clusterTexture: Texture2D;
 
     constructor(xSlices: number, ySlices: number, zSlices: number, maxLightsPerClusterAverage: number) {
@@ -462,7 +471,42 @@ export class Cluster {
         this._placeSpotLightToClusters(lightIndex, lightBound);
     }
 
+    private _cameraUnchanged(camera: Camera): boolean {
+        var snap = this._lastCameraSnapshot;
+        var elements = camera.viewMatrix.elements;
+        for (var i = 0; i < 16; i++) {
+            if (snap[i] !== elements[i]) return false;
+        }
+        return snap[16] === camera.nearPlane
+            && snap[17] === camera.farPlane
+            && snap[18] === (camera.orthographic ? 1 : 0)
+            && snap[19] === camera.fieldOfView
+            && snap[20] === camera.aspectRatio
+            && snap[21] === camera.orthographicVerticalSize;
+    }
+
+    private _saveCameraSnapshot(camera: Camera, scene: Scene3D): void {
+        var snap = this._lastCameraSnapshot;
+        var elements = camera.viewMatrix.elements;
+        for (var i = 0; i < 16; i++) {
+            snap[i] = elements[i];
+        }
+        snap[16] = camera.nearPlane;
+        snap[17] = camera.farPlane;
+        snap[18] = camera.orthographic ? 1 : 0;
+        snap[19] = camera.fieldOfView;
+        snap[20] = camera.aspectRatio;
+        snap[21] = camera.orthographicVerticalSize;
+        this._lastCamera = camera;
+        this._lastScene = scene;
+        this._lastLightsMark = LightQueue._changeMark;
+    }
+
     update(camera: Camera, scene: Scene3D): void {
+        if (this._lastCamera === camera && this._lastScene === scene
+            && this._lastLightsMark === LightQueue._changeMark && this._cameraUnchanged(camera)) {
+            return;
+        }
         this._updateMark++;
         var camNear: number = camera.nearPlane;
         this._depthSliceParam.x = Config3D.lightClusterCount.z / Math.log2(camera.farPlane / camNear);
@@ -547,6 +591,7 @@ export class Cluster {
             var width: number = this._clusterTexture.width;
             this._clusterTexture.setSubPixelsData(0, 0, width, Math.ceil(lightOff / (4 * width)), clusterPixels, 0, false, false, false);
         }
+        this._saveCameraSnapshot(camera, scene);
     }
 }
 
