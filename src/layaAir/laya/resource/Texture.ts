@@ -532,7 +532,7 @@ export class Texture extends Resource {
             dst = (atlasPosY + rePosY) * wstride;
             st = atlasPosX * 4 + rePosX * 4 + dst;
             for (i = 0; i < drawh; i++) {
-                ret.set(pix.slice(st, st + draww * 4), width * 4 * (i + marginT) + marginL * 4);
+                ret.set(pix.subarray(st, st + draww * 4), width * 4 * (i + marginT) + marginL * 4);
                 st += wstride;
             }
             return ret;
