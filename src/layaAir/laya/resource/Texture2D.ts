@@ -159,8 +159,9 @@ export class Texture2D extends BaseTexture {
                 var textureWidth: number = byte.readInt32();
                 var pixelDataLength: number = byte.readInt32();
                 pixelDataArrays = new Float32Array(textureWidth * textureWidth * 4);
-                usePixelData = new Float32Array(byte.readArrayBuffer(pixelDataLength * 4));
-                pixelDataArrays.set(usePixelData, 0);
+                // Copy directly into the final buffer; byte views allow unaligned payload offsets.
+                new Uint8Array(pixelDataArrays.buffer).set(new Uint8Array(byte.rawBuffer, byte.pos, pixelDataLength * 4));
+                byte.pos += pixelDataLength * 4;
                 var texture: Texture2D = new Texture2D(textureWidth, textureWidth, TextureFormat.R32G32B32A32, false, false);
                 texture.setPixelsData(pixelDataArrays, false, false);
                 texture.filterMode = FilterMode.Point;
