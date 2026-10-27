@@ -823,7 +823,9 @@ export class Mesh extends Resource implements IClone {
         var vb: VertexBuffer3D = this._vertexBuffer;
         var destVB: VertexBuffer3D = Laya3DRender.renderOBJCreate.createVertexBuffer3D(vb._byteLength, vb.bufferUsage, vb.canRead);
         destVB.vertexDeclaration = vb.vertexDeclaration;
-        destVB.setData(vb.getUint8Data().slice().buffer);
+        var vertexData: Uint8Array = vb.getUint8Data();
+        // setData copies into the destination's own storage.
+        destVB.setData(vertexData.buffer, 0, vertexData.byteOffset, vertexData.byteLength);
         destObject._vertexBuffer = destVB;
         destObject._vertexCount = this._vertexCount;
         var ib: IndexBuffer3D = this._indexBuffer;
