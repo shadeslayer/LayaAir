@@ -109,9 +109,17 @@ export abstract class UniformBufferWriter {
     }
     /** @internal */
     _writeArrayBuffer(uniform: UniformLayoutItem, value: Float32Array) {
-        let n = uniform.arrayLength, size = uniform.size, stride = uniform.alignStride;
-        for (let i = 0; i < n; i++)
-            uniform.view.set(value.subarray(i * size, (i + 1) * size), i * stride);
+        const n = uniform.arrayLength, size = uniform.size, stride = uniform.alignStride;
+        const view = uniform.view;
+        // Contiguous arrays (e.g. Spine bone matrices) need no per-element views.
+        // Keep chunked copies for aliases and invalid bounds: their partial writes differ.
+        if (n > 0 && size === stride && value.length === n * size &&
+            value.length <= view.length && value.buffer !== view.buffer) {
+            view.set(value);
+        } else {
+            for (let i = 0; i < n; i++)
+                view.set(value.subarray(i * size, (i + 1) * size), i * stride);
+        }
         this._dirty();
     }
 
